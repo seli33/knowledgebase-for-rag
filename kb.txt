@@ -1,0 +1,67 @@
+Admissions (admissions.md)
+
+admission_eligibility
+
+admission_process
+
+selection_process
+
+batch_schedule
+
+express_interest
+
+after failing can I apply another time
+
+after passing info about interview
+
+2. Courses (courses.md)
+
+    ask_course_fee
+    is it compensated
+    ask_course_info / syllabus
+    duration of course
+    toughness of the course
+    what kind of projects will I be working on
+
+    are the courses accredited?
+
+    at what time will the sessions be held?
+
+    attendance
+
+    assignment compulsory
+
+    duration of assignment
+
+3. Exams (exams.md)
+
+exam_format
+exam_process
+
+4. Contact & Support (contact_support.md)
+
+request_technical_support / exam_access_issue
+
+request_technical_support / exam_link
+
+request_technical_support / exam_result
+
+request_technical_support / exam_scheduling
+
+request_technical_support / seat_availability
+
+request_technical_support / ask_contact
+
+
+
+
+
+5. Location (location.md)
+
+location_mode
+
+6. Career & Guidance (career_guidance.md)
+placement opportunity
+career_guidance
+availability of mentors
+recommendation
