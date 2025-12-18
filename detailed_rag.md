@@ -129,7 +129,7 @@ The process is competitive, and selections are made based on merit and program c
 
 **Quick Answer:** Submit an enquiry form to express interest; the admissions team will contact you with next steps.
 
-**Details:** If you wish to apply or receive more information about the AI Fellowship program, you should submit an enquiry form. Once received, the admissions team will review your interest and contact you with detailed information about the application process, upcoming batch schedules, and next steps. This is the first step in the admission journey.
+**Details:** If you wish to apply or receive more information about the AI Fellowship program, you should submit an enquiry form. Once received, the admissions team will review your interest and contact you with detailed information about the application process, upcoming batch schedules, and next steps. 
 
 **Related Topics:**
 - Admission Eligibility (check if you qualify)
