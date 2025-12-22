@@ -4,7 +4,7 @@
 
 ## Admission Eligibility | Keywords: requirements, prerequisites, qualifications, who can apply, criteria, eligible, eligibility
 
-**Quick Answer:** The fellowship is for final-year IT students and CS graduates/professionals with math, programming, and Python skills.
+**Quick Answer:** The fellowship is for final year IT students and CS graduates/professionals with math, programming, and Python skills.
 
 **Details:** To be eligible for the AI Fellowship program, applicants must meet the following requirements:
 

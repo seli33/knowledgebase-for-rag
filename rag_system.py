@@ -1,5 +1,4 @@
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
 from langchain_community.llms import Ollama
 import psycopg2
 from dotenv import load_dotenv
@@ -15,20 +14,19 @@ DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 
-
 class RAGSystem:
     def __init__(self):
         print("Initializing RAG System...")
-        
+
         # Load embedding model
         print("Loading embedding model...")
         self.embedding = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_name="BAAI/bge-small-en-v1.5",
             model_kwargs={'device': 'cpu'},
             encode_kwargs={'normalize_embeddings': True}
         )
         print("Embedding model loaded")
-        
+
         # Connect to database
         print("Connecting to database...")
         self.conn = psycopg2.connect(
@@ -40,141 +38,175 @@ class RAGSystem:
         )
         self.cursor = self.conn.cursor()
         print("Database connected")
-        
+
         # Initialize LLM
-        print("Initializing llm...")
         self.llm = Ollama(
-        model="gemma2",             
-        base_url="http://localhost:11434",  # optional, default
-        temperature=0.2
-    )
+            model="qwen2.5:1.5b",
+            temperature=0.1,
+            num_ctx=2048,
+            num_predict=200,
+            num_thread=2,
+        )
+
         print("RAG System ready!\n")
-    
+
+    # ---------------- RETRIEVAL ----------------
     def retrieve_similar_chunks(self, query, top_k=5):
-        # Generate embedding for the query
         query_embedding = self.embedding.embed_query(query)
-        
-        # Perform similarity search using cosine distance
+
         search_sql = """
         SELECT 
             id,
             header,
-            subheader,
+            keywords,
             content,
             embedding <=> %s::vector AS distance
         FROM faq_chunks
         ORDER BY embedding <=> %s::vector
         LIMIT %s;
         """
-        
+
         self.cursor.execute(search_sql, (query_embedding, query_embedding, top_k))
         results = self.cursor.fetchall()
-        
+
+        # -------- Intent-aware filtering (keyword-based) --------
+        query_lower = query.lower()
+
+        if any(word in query_lower for word in ["eligib", "eligible", "apply", "requirement", "criteria"]):
+            filtered = [
+                r for r in results
+                if r[2] and "eligib" in r[2].lower()
+            ]
+            if filtered:
+                results = filtered
+
         return results
-    
+
+    # ---------------- CONTEXT FORMATTING ----------------
     def format_context(self, chunks):
         context_parts = []
+        MAX_CHARS = 600
+
         for i, chunk in enumerate(chunks, 1):
-            id_, header, subheader, content, distance = chunk
+            id_, header, keywords, content, distance = chunk
             context_parts.append(
                 f"[Document {i}]\n"
-                f"Header: {header}\n"
-                f"Subheader: {subheader}\n"
-                f"Content: {content}\n"
-                f"Relevance Score: {1 - distance:.3f}\n"
+                f"Question: {header}\n"
+                f"Answer:\n{content[:MAX_CHARS]}\n"
             )
+
         return "\n".join(context_parts)
-    
+
+    # ---------------- GENERATION ----------------
     def generate_answer(self, query, context):
-        prompt = f"""You are a helpful assistant that answers questions based on the provided context.
+        prompt = f"""
+You are a retrieval-based FAQ assistant for the AI Fellowship Program.
+
+Your job is to answer the user's question using ONLY the information explicitly stated
+in the provided context.
+
+STRICT RULES:
+- Use ONLY the context below.
+- Use formal and friendly tone for the students.
+- Do NOT use prior knowledge or assumptions.
+- You can add explanations, examples, or extra details.
+- If a section labeled "Quick Answer" exists in the context, you MUST use it as the primary source of the answer.Ignore lists of questions, variations, or related topics.
+- You MAY combine information from multiple documents if they answer different parts of the same question.
+- If the context does NOT clearly and directly answer the question, respond EXACTLY with:
+"This information is not available in the FAQ."
+
+Answering instructions:
+- If the question has multiple parts, answer only the parts supported by the context.
+- If ANY part cannot be answered, return the fallback sentence.
+- Prefer direct sentences taken from the context.
+- Keep the answer concise and factual.
 
 Context:
 {context}
 
-Question: {query}
+Question:
+{query}
 
-Instructions:
-- Answer the question based ONLY on the information provided in the context above
-- If the context doesn't contain enough information to answer the question, say I dont know
-- Be concise and clear in your response
-- Cite which document(s) you're using if relevant
+Answer:
+"""
+        return self.llm.invoke(prompt)
 
-Answer:"""
-        
-        response = self.llm.invoke(prompt)
-        return response
-    
-    def query(self, question, top_k=3, show_context=False):
+    # ---------------- MAIN QUERY PIPELINE ----------------
+    def query(self, question, top_k=5, show_context=False):
         print("Question:", question, "\n")
-        
-        # Step 1: Retrieve similar chunks
+
         print("Retrieving top", top_k, "relevant chunks...")
         chunks = self.retrieve_similar_chunks(question, top_k)
-        
+
         if not chunks:
-            print("No relevant information found in the database")
-            return None
-        
+            return "This information is not available in the FAQ."
+
         print("Found", len(chunks), "relevant chunks\n")
-        
-        # Show retrieved chunks if requested
+
+        # Debug view
         if show_context:
             print("Retrieved Context:")
             print("-" * 80)
             for i, chunk in enumerate(chunks, 1):
-                id_, header, subheader, content, distance = chunk
-                print("\n[Chunk", i, "] (Similarity:", f"{1-distance:.3f})")
+                id_, header, keywords, content, distance = chunk
+                print(f"\n[Chunk {i}] (Similarity: {1 - distance:.3f})")
                 print("Header:", header)
-                print("Subheader:", subheader)
+                print("Keywords:", keywords)
                 print("Content:", content[:200], "...")
             print("\n" + "-" * 80 + "\n")
-        
-        # Step 2: Format context
+
+        # -------- Similarity Gate (ANTI-HALLUCINATION) --------
+        similarities = [1 - chunk[4] for chunk in chunks]
+        max_similarity = max(similarities)
+
+        MIN_SIMILARITY = 0.5
+        if max_similarity < MIN_SIMILARITY:
+            return "This information is not available in the FAQ."
+
+        # Format context
         context = self.format_context(chunks)
-        
-        # Step 3: Generate answer
-        print("Generating answer...")
+
+        # Generate answer
         answer = self.generate_answer(question, context)
-        
-        print("Answer:")
-        print(answer)
-        print("\n" + "=" * 80 + "\n")
-        
+
+        # -------- Post-answer normalization --------
+        if "not available in the faq" in answer.lower():
+            answer = "This information is not available in the FAQ."
+
         return answer
-    
+
+    # ---------------- CLEANUP ----------------
     def close(self):
         self.cursor.close()
         self.conn.close()
         print("Database connection closed")
 
 
-# Example usage
+# ---------------- RUN MODE ----------------
 if __name__ == "__main__":
-    # Initialize RAG system
     rag = RAGSystem()
-    
-    # Interactive mode
+
     print("RAG System Interactive Mode")
     print("Type 'quit' to exit, 'context' to toggle context display\n")
-    
-    show_context = False
-    
+
+    show_context = True
+
     while True:
         user_input = input("Ask a question: ").strip()
-        
+
         if user_input.lower() == 'quit':
-            print("Goodbye!")
             break
-        
+
         if user_input.lower() == 'context':
             show_context = not show_context
             print("Context display:", "ON" if show_context else "OFF", "\n")
             continue
-        
+
         if not user_input:
             continue
-        
-        rag.query(user_input, top_k=5, show_context=show_context)
-    
-    # Close connection
+
+        print("\nAnswer:")
+        print(rag.query(user_input, top_k=5, show_context=show_context))
+        print("\n" + "=" * 80 + "\n")
+
     rag.close()

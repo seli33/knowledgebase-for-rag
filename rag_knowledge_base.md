@@ -121,7 +121,8 @@ Courses include lectures, practical projects, and assessments. A detailed syllab
 
 **Example questions:**  
 - What topics are covered?  
-- Can I see the syllabus ?  
+- Can I see the syllabus ? 
+- What is the course? 
 
 ### Duration of Course
 The course is 24 Weeks long. 21 Weeks for the course contents and 3 Weeks for Project works.  
